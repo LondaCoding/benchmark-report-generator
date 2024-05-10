@@ -1,0 +1,60 @@
+from abc import ABC, abstractmethod
+
+# Interfaz para el generador de informes
+class ReportGenerator(ABC):
+    @abstractmethod
+    def generate(self):
+        pass
+
+# Interfaz para el generador de encabezado
+class HeaderGenerator(ABC):
+    @abstractmethod
+    def generate_header(self):
+        pass
+
+# Interfaz para el generador de cuerpo
+class BodyGenerator(ABC):
+    @abstractmethod
+    def generate_body(self):
+        pass
+
+# Interfaz para el generador de pie
+class FooterGenerator(ABC):
+    @abstractmethod
+    def generate_footer(self):
+        pass
+
+# Clase base para el generador de informes de texto simple
+class PlainTextReportGenerator(ReportGenerator, HeaderGenerator, BodyGenerator, FooterGenerator):
+    def generate_header(self):
+        print("Plain Text Header")
+    
+    def generate_body(self):
+        print("Plain Text Body")
+    
+    def generate_footer(self):
+        print("Plain Text Footer")
+
+# Clase base para el generador de informes HTML
+class HTMLReportGenerator(ReportGenerator, HeaderGenerator, BodyGenerator, FooterGenerator):
+    def generate_header(self):
+        print("<html><head><title>HTML Report</title></head><body>")
+    
+    def generate_body(self):
+        print("<h1>HTML Body</h1>")
+    
+    def generate_footer(self):
+        print("</body></html>")
+
+# Cliente
+def main():
+    # Generar informe de texto simple
+    plain_text_report = PlainTextReportGenerator()
+    plain_text_report.generate()
+    
+    # Generar informe HTML
+    html_report = HTMLReportGenerator()
+    html_report.generate()
+
+if __name__ == "__main__":
+    main()

@@ -1,8 +1,11 @@
 from openpyxl import load_workbook
+from docx import Document
+from datetime import datetime
+import shutil
 import os
 import re
 
-def create_comments():
+def createComments():
     arr = [['Variacion Reservas Netas'],
            ['Variacion Regalias ECP'],
            ['Variacion Revenue'],
@@ -15,7 +18,8 @@ def create_comments():
            ['Variacion Abandono']]
     return arr
 
-def create_section(comments):
+
+def createSection(comments):
     text = ''
 
     #get the reserves that have comments
@@ -37,7 +41,8 @@ def create_section(comments):
 
     return text
 
-def retrieve_comments(file_path):
+
+def retreiveDocumentInfo(file_path):
     try:
         # Load the Excel workbook
         wb = load_workbook(file_path)
@@ -46,14 +51,14 @@ def retrieve_comments(file_path):
         
         # Iterate over all cells with comments
         current_reserve_type = ws['B1'].value
-        comments = create_comments()
+        comments = createComments()
         
-        document_text = ''
+        document_text = []
         for col in ws.iter_cols():
             #verify if documment has finished & add the last type of reserve
             if col[1].column_letter == 'PD':  
-                document_text+= current_reserve_type + '\n'
-                document_text+= create_section(comments)
+                document_text.append(current_reserve_type)
+                document_text.append(comments)
                 return document_text
             
             #verify if category has changed
@@ -65,10 +70,10 @@ def retrieve_comments(file_path):
                         if len(variable) > 1:
                             there_are_comments= True
                     if there_are_comments:
-                        document_text+= '\n' + current_reserve_type + '\n'
-                        document_text+= create_section(comments)
+                        document_text.append(current_reserve_type)
+                        document_text.append(comments)
                         current_reserve_type= col[0].value
-                        comments= create_comments()
+                        comments= createComments()
                 
             #traverse the column
             for cell in col:
@@ -84,16 +89,53 @@ def retrieve_comments(file_path):
         print(f"An error occurred: {e}")
 
 
+def findBenchmark(field_path):
+    #single file documentation
+    directory_items= os.listdir(field_path)
+    benchmarks= [item for item in directory_items if "Plantilla Benchmarking" in item]
+    print('Error: there was no benchmark found(2)') if len(benchmarks) < 1 else None
 
-# Concatenate the file name with the current directory using the os module
-#file_path = os.path.join(os.path.dirname(__file__), file_name)
-#c:\Users\juan.perez\OneDrive - Quorum Business Solutions\Por presentar a ECP\Aprobados ECP\Cantagallo\Cristalina\Plantilla Benchmarking - Campo Cristalina.xlsm
-#c:\Users\juan.perez\OneDrive - Quorum Business Solutions\Documents\PS\Ecopetrol\Reservas\Automatization
-
-#ile_path = str(input('File path: '))
-#file_name = str(input('File name: '))
-full_path = os.path.join('c:\\Users\\juan.perez\\OneDrive - Quorum Business Solutions\\Documents\\PS\\Ecopetrol\\Reservas\\Automatization', ('test1'+'.xlsm')).replace('\\', r'\\')
-print(full_path)
-document_text = retrieve_comments(full_path)
-#print(document_text)
+    #find latest modified benchmark
+    most_recent_date= datetime(1900, 1, 1)
+    most_recent_file : str = None
+    for file in benchmarks:
+        new_file_date= datetime.fromtimestamp(os.path.getmtime(os.path.join(field_path, file)))
+        if new_file_date > most_recent_date:
+            most_recent_date= new_file_date
+            most_recent_file= file
+    print('Error: there was no benchmark found(1)') if not most_recent_file else None
     
+    excel_path= os.path.join(field_path, most_recent_file)
+    return excel_path
+
+
+def traverseAsset(asset):
+    #Get the folders in the directory
+    asset_path= os.path.join(os.getcwd(), asset)
+    print(asset)
+    print(asset_path)
+    asset_items= os.listdir(asset_path)
+    fields= [item for item in asset_items if os.path.isdir(os.path.join(asset_path, item))]
+    print(fields)
+
+    #There's only one field in the asset
+    if len(fields) < 1:
+        excel_path= findBenchmark(asset_path)
+        document_content = retreiveDocumentInfo(excel_path)
+        print(excel_path)
+        print(document_content)
+    #there are multiple fields in the asset
+    else:
+        for field in fields:
+            field_path= os.path.join(asset_path, field)
+            excel_path= findBenchmark(field_path)
+            document_content = retreiveDocumentInfo(excel_path)
+            print(field)
+            print(document_content)
+            print()
+            print()
+
+
+  
+traverseAsset('Cantagallo')
+#traverseAsset('Cantagallo/Cristalina')
