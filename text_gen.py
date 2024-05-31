@@ -1,13 +1,16 @@
 from openpyxl import load_workbook
 from docx import Document
 from docx.shared import Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from datetime import datetime
+from openai import OpenAI
 import sys
 import time
 import os
 import re
 
 error_log= []
+client= OpenAI()
 
 def createComments():
     arr = [['Reservas Netas'],
@@ -142,15 +145,41 @@ def addFieldToDocument(doc:Document, field_info, field_name):
             for variable in location_type:
                 if len(variable) > 1:
                     doc.add_heading(variable[0], level=3)
+                    paragraph= ''
                     for comment in variable[1:]:
-                        comment= comment.strip(' \t\n\r')
-                        doc.add_paragraph(comment)
+                        paragraph+= comment.strip(' \t\n\r')
+                    #CHATGPT CALL
+                    # paragraph= aiCorrection(paragraph)
+                    para= doc.add_paragraph(paragraph)
             doc.add_paragraph('')            
-    doc.add_paragraph('')           
+    doc.add_paragraph('')    
+
+    for para in doc.paragraphs:
+        para.alignment= 3
+    
+    doc.paragraphs[16].alignment= 1
 
             
     return doc
 
+# def aiCorrection(paragraph):
+#     model= "gpt-3.5-turbo"
+#     print(f'Calling {model} for correction...')
+#     system_context= '''Eres un proveedor de software para empresas del sector energetico. 
+#     Has comparado las variables calculadas por tu software "Planning Space", con los valores 
+#     brindados por un auditor y realizaste textos que explican las diferencias entre los 
+#     valores del auditor y "Planning Space". Se te brindara: "nombre del campo", "tipo de
+#       campo", "variable", "mensaje". Tu mision es devolver unicamente el texto de mensaje 
+#       (sin comillas o texto adicional), con ortografía y sintaxis corregida a la perfección 
+#       y redactado en tercera persona, teniendo en cuenta el contexto del mensaje.'''
+#     completion= client.chat.completions.create(
+#         model=model,
+#         messages=[
+#             {"role":"system", "content":system_context},
+#             {"role":"user", "content":paragraph}
+#         ]
+#     )
+#     return completion.choices[0].message.content
 
 def traverseAsset(asset, worksheet):
     template_path= os.path.join(os.getcwd(), "Template.docx") #change to Template!!!!!!!!!!
@@ -166,7 +195,7 @@ def traverseAsset(asset, worksheet):
     try:
         asset_name= re.findall(regex, asset)[0]
     except IndexError as e:
-        print(f'Error traversing the asset, the folder numeration <#. > finished, there are no more finished assets.')
+        print(f'The folder numeration <#. > finished, there are no more finished assets. Program finished.')
         print('Program finished')
         sys.exit(0)
 
