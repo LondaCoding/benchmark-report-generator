@@ -1,0 +1,8 @@
+#ignore everything
+*
+
+#With exception of
+!.gitignore
+!text_gen_chatgpt.py
+!text_gen.py
+!Template.docx
