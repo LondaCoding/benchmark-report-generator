@@ -175,23 +175,11 @@ def addFieldToDocument(doc:Document, field_info, field_name):
 #     )
 #     return completion.choices[0].message.content
 
-def traverseAsset(asset, worksheet, doc):
-    
+def traverseAsset(worksheet, doc, asset_path, asset_name):
     #Get the folders in the directory
-    asset_path= os.path.join(os.getcwd(), asset)
     asset_items= os.listdir(asset_path)
     fields= [item for item in asset_items if os.path.isdir(os.path.join(asset_path, item))]
-
-    #modify the title & it's style
-    regex= r'\d+. (.*)'
-    try:
-        asset_name= re.findall(regex, asset)[0]
-    except IndexError as e:
-        print(f'The folder numeration <#. > finished, there are no more finished assets. Program finished.')
-        print('Program finished')
-        return doc
         
-
     #add asset name to doc
     print('Name of the asset:', asset_name)
     last_paragraph= doc.add_heading(asset_name, level=1)
@@ -210,7 +198,7 @@ def traverseAsset(asset, worksheet, doc):
             return doc
     #there are multiple fields in the asset
     else:
-        print(f'Fields of the asset "{asset}":', fields)
+        print(f'Fields of the asset "{asset_name}":', fields)
         for field in fields:
             doc.add_heading(field, level=2)
             field_path= os.path.join(asset_path, field)
@@ -223,7 +211,7 @@ def traverseAsset(asset, worksheet, doc):
                 last_paragraph._element.getparent().remove(last_paragraph._element)
                 continue
 
-    print(f"Asset {asset} added to doccument.")
+    print(f"Asset {asset_name} added to doccument.")
     return doc
     
   
@@ -289,13 +277,25 @@ def generateReportFolder():
     doc.paragraphs[16].alignment= 1
 
     for contributer in contributors:
-        worksheet= str(input("Ingrese el nombre del WorkSheet de los documentos: "))
-        assets= [item for item in os.listdir(os.path.join(os.getcwd(), contributer)) if os.path.isdir(item)]
-        print(contributors)
-        print(assets)
+        contributer_dir= os.path.join(os.getcwd(), contributer)
+        assets= [item for item in os.listdir(contributer_dir) if os.path.isdir(os.path.join(contributer_dir, item))]
+
+        worksheet= str(input(f'Worshet for "{contributer}" files: '))
         for asset in assets:
+            #modify the title & it's style
+            regex= r'\d+. (.*)'
+            try:
+                asset_name= re.findall(regex, asset)[0]
+            except IndexError as e:
+                print(f'The folder numeration <#. > finished, there are no more finished assets. Program finished.')
+                print('Program finished')
+                continue
+
+            print(asset_name)
+            asset_path= os.path.join(contributer_dir, asset)
+
             print('CREATING ASSET:', asset)
-            doc= traverseAsset(asset, worksheet, doc)
+            doc= traverseAsset(worksheet, doc, asset_path, asset_name)
             print()
             print()
     
