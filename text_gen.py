@@ -43,11 +43,6 @@ def retreiveDocumentInfo(file_path, worksheet):
     
     document_text = []
     for col in ws.iter_cols():
-        #verify if documment has finished & add the last type of reserve
-        if col[1].column_letter == 'PD':  
-            document_text.append(current_reserve_type)
-            document_text.append(comments)
-            return document_text
         
         #verify if category has changed
         if col[0].value:
@@ -60,8 +55,8 @@ def retreiveDocumentInfo(file_path, worksheet):
                 if there_are_comments:
                     document_text.append(current_reserve_type)
                     document_text.append(comments)
-                    current_reserve_type= col[0].value
                     comments= createComments()
+                current_reserve_type= col[0].value
             
         #traverse the column
         for cell in col:
@@ -74,6 +69,10 @@ def retreiveDocumentInfo(file_path, worksheet):
                     comment = expression.search(cell.comment.text)
                 comment= comment.group(1)
                 comments[(cell.row-3)//3].append(comment)
+
+    #documment has finished, add the last type of reserve  
+    document_text.append(current_reserve_type)
+    document_text.append(comments)
     return document_text        
 
 
@@ -104,7 +103,7 @@ def findBenchmark(field_path):
         return excel_path
 
 
-def addFieldToDocument(doc:Document, field_info, field_name):
+def addFieldToDocument(doc:Document, field_info):
     accepted_types= {'PDP':'Desarrolladas produciendo', 
                'PNP':'Desarrolladas no produciendo', 
                'PND':'No desarrolladas',
@@ -235,7 +234,7 @@ def createField(doc, field_path, field, asset, worksheet):
         return None
     
     print(f'Adding field "{field}" comments...')
-    return addFieldToDocument(doc, excel_content, field)
+    return addFieldToDocument(doc, excel_content)
 
 
 def generateReportFolder():

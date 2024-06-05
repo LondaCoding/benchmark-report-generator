@@ -1,9 +1,9 @@
 from openpyxl import load_workbook
 from docx import Document
 from docx.shared import Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from datetime import datetime
 from openai import OpenAI
-import sys
 import time
 import os
 import re
@@ -110,10 +110,8 @@ def addFieldToDocument(doc:Document, field_info, field_name):
                'PRB':'Probables',
                'PS':'Posibles'}
     
-    doc.add_heading(field_name, level=1)
     print_type= True
     for location_type in field_info:
-        paragraph= 'nombre del campo=' + field_name + '\n'
         #skip if not an accepted type type
         if print_type==False:
             print_type=True
@@ -122,8 +120,7 @@ def addFieldToDocument(doc:Document, field_info, field_name):
         if type(location_type) is str:
             if location_type in accepted_types:
                 title_text= accepted_types[location_type]+f' ({location_type})'
-                doc.add_heading(title_text, level=2)
-                paragraph+= 'tipo de campo='+ 'title_text' + '\n'
+                doc.add_heading(title_text, level=3)
             else:
                 print_type= False
                 print(f'The type: "{location_type}" was skipped')
@@ -139,26 +136,22 @@ def addFieldToDocument(doc:Document, field_info, field_name):
             for variable in no_comment_variables:
                 no_comment_variables_title+= variable + ', '
             no_comment_variables_title= no_comment_variables_title[:-2]
-            doc.add_heading(no_comment_variables_title, level=3)
+            doc.add_heading(no_comment_variables_title, level=4)
             doc.add_paragraph('Calculo OK')
 
             #add comments
             for variable in location_type:
                 if len(variable) > 1:
-                    doc.add_heading(variable[0], level=3)
-                    paragraph+= 'variable=' + variable[0] + '\nmensaje='
+                    doc.add_heading(variable[0], level=4)
+                    paragraph= ''
                     for comment in variable[1:]:
                         paragraph+= comment.strip(' \t\n\r')
                     #CHATGPT CALL
                     paragraph= aiCorrection(paragraph)
-                    doc.add_paragraph(paragraph)
+                    para= doc.add_paragraph(paragraph)
+                    para.alignment= 3
             doc.add_paragraph('')            
-    doc.add_paragraph('')           
-
-    for paragraph in doc.paragraphs:
-        paragraph.alignment= 3
-    
-    doc.paragraphs[16].alignment= 1 
+    doc.add_paragraph('')    
             
     return doc
 
@@ -181,34 +174,15 @@ def aiCorrection(paragraph):
     )
     return completion.choices[0].message.content
 
-def traverseAsset(asset, worksheet):
-    template_path= os.path.join(os.getcwd(), "Template.docx") #change to Template!!!!!!!!!!
-    doc= Document(template_path)
-    
+def traverseAsset(worksheet, doc, asset_path, asset_name):
     #Get the folders in the directory
-    asset_path= os.path.join(os.getcwd(), asset)
     asset_items= os.listdir(asset_path)
     fields= [item for item in asset_items if os.path.isdir(os.path.join(asset_path, item))]
-
-    #modify the title & it's style
-    regex= r'\d+. (.*)'
-    try:
-        asset_name= re.findall(regex, asset)[0]
-    except IndexError as e:
-        print(f'Error traversing the asset, the folder numeration <#. > finished, there are no more finished assets.')
-        print('Program finished')
-        sys.exit(0)
-
+        
+    #add asset name to doc
     print('Name of the asset:', asset_name)
-
-    doc.paragraphs[16].text= asset_name
-    target_paragraph = doc.paragraphs[16] 
-    for run in target_paragraph.runs:
-        run.font.size = Pt(26)  # Change to the desired font size in points
-    for run in target_paragraph.runs:
-        run.font.color.rgb = RGBColor(0, 112, 192)  # Change RGB values for the desired color
-    for run in target_paragraph.runs:
-        run.font.name = 'Calibri'  # Change to the desired font name
+    last_paragraph= doc.add_heading(asset_name, level=1)
+    last_paragraph.alignment = 1
 
     #There's only one field in the asset
     if len(fields) < 1:
@@ -217,24 +191,28 @@ def traverseAsset(asset, worksheet):
         if temporal_doc:
             doc=temporal_doc 
         else:
-            return None
+            print('The field info was not added to the document')
+            last_paragraph = doc.paragraphs[-1]
+            last_paragraph.clear()
+            return doc
     #there are multiple fields in the asset
     else:
-        print(f'Fields of the asset "{asset}":', fields)
+        print(f'Fields of the asset "{asset_name}":', fields)
         for field in fields:
+            doc.add_heading(field, level=2)
             field_path= os.path.join(asset_path, field)
             temporal_doc= createField(doc, field_path, field, asset_name, worksheet)
             if temporal_doc:
                 doc=temporal_doc 
             else:
                 print('The field info was not added to the document')
+                last_paragraph = doc.paragraphs[-1]
+                last_paragraph._element.getparent().remove(last_paragraph._element)
                 continue
 
-    #Save file
-    new_file_location= os.path.join(os.getcwd(), f'Reportes Generados GPT\\{asset}.docx')
-    doc.save(new_file_location)
-    print(f"Document {new_file_location} created")
-
+    print(f"Asset {asset_name} added to doccument.")
+    return doc
+    
   
 def createField(doc, field_path, field, asset, worksheet):
     print()
@@ -250,10 +228,10 @@ def createField(doc, field_path, field, asset, worksheet):
     print(f'Fetching field "{field}" comments...')
     excel_content= retreiveDocumentInfo(excel_path, worksheet)
     if type(excel_content) is str:
-        error_message= f'Error retreiving field "{field}" comments of asset: "{asset}": {excel_content}'
+        error_message= f'Couldnt retrieve field "{field}" from asset "{asset}". Error: {excel_content}'
         error_log.append(error_message)
         print(error_message)
-        return 
+        return None
     
     print(f'Adding field "{field}" comments...')
     return addFieldToDocument(doc, excel_content, field)
@@ -261,36 +239,79 @@ def createField(doc, field_path, field, asset, worksheet):
 
 def generateReportFolder():
     #create directory where reports will be saved
-    if not "Reportes Generados GPT" in os.listdir(os.getcwd()):
-        print('Creating directory "Reportes Generados GPT"...')
-        os.makedirs("Reportes Generados GPT") 
+    if not "Reportes Generados" in os.listdir(os.getcwd()):
+        print('Creating directory "Reportes Generados"...')
+        os.makedirs("Reportes Generados") 
     else:
-        print('Directory "Reportes Generados GPT" already exists')
+        print('Directory "Reportes Generados" already exists')
         try:
-            for file in os.listdir("Reportes Generados GPT"):
-                os.remove(f"Reportes Generados GPT\\{file}")
-                print(f'The file "Reportes Generados GPT\\{file}" has been erased')
+            for file in os.listdir("Reportes Generados"):
+                os.remove(f"Reportes Generados\\{file}")
+                print(f'The file "Reportes Generados\\{file}" has been erased')
             time.sleep(1)
         except Exception as e:
             error_message= f"An error occurred: {e}\n----------------RE-RUN THE PROGRAM AFTER CLOSING ALL DOCUMMENTS TO ENSURE INTEGRITY----------------"
             error_log.append(error_message)
             print(error_message)
+            
 
 
-    assets= [item for item in os.listdir(os.getcwd()) if os.path.isdir(item)]
+    contributors= [item for item in os.listdir(os.getcwd()) if os.path.isdir(item)]
     try:
-        assets.remove("Reportes Generados GPT")
+        contributors.remove("Reportes Generados")
+        print('"Reportes Generados" not considered as an asset')
+    except ValueError:
+        None
+    try:
+        contributors.remove(".git")
+        print('".git" not considered as an asset')
     except ValueError:
         None
 
-    print('Assets:', assets)
+    print('Contributors:', contributors)
     print()
-    worksheet= str(input("Ingrese el nombre del WorkSheet de los documentos: "))
-    for asset in assets:
-        print('CREATING DOCUMENT:', asset)
-        traverseAsset(asset, worksheet)
-        print()
-        print()
+    
+    template_path= os.path.join(os.getcwd(), "Template.docx") #change to Template!!!!!!!!!!
+    doc= Document(template_path)
+    doc.paragraphs[16].alignment= 1
+
+    for contributer in contributors:
+        contributer_dir= os.path.join(os.getcwd(), contributer)
+        assets= [item for item in os.listdir(contributer_dir) if os.path.isdir(os.path.join(contributer_dir, item))]
+
+        worksheet= str(input(f'Worshet for "{contributer}" files: '))
+        for asset in assets:
+            #modify the title & it's style
+            regex= r'\d+. (.*)'
+            try:
+                asset_name= re.findall(regex, asset)[0]
+            except IndexError as e:
+                print(f'The folder numeration <#. > finished, there are no more finished assets. Program finished.')
+                print('Program finished')
+                continue
+
+            print(asset_name)
+            asset_path= os.path.join(contributer_dir, asset)
+
+            print('CREATING ASSET:', asset)
+            doc= traverseAsset(worksheet, doc, asset_path, asset_name)
+            print()
+            print()
+    
+    #modify title
+    doc.paragraphs[16].text= 'Reporte de Valores por Activo'
+    target_paragraph = doc.paragraphs[16] 
+    for run in target_paragraph.runs:
+        run.font.size = Pt(26)  # Change to the desired font size in points
+    for run in target_paragraph.runs:
+        run.font.color.rgb = RGBColor(0, 112, 192)  # Change RGB values for the desired color
+    for run in target_paragraph.runs:
+        run.font.name = 'Calibri'  # Change to the desired font name
+
+    #Save file
+    new_file_location= os.path.join(os.getcwd(), f'Reporte.docx')
+    doc.save(new_file_location)
+    print(f'Document saved in "{new_file_location}"')
 
     print('ERRORS DURING EXECUTION')
     for error in error_log:
