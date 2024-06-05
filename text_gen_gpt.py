@@ -8,8 +8,16 @@ import time
 import os
 import re
 
-error_log= []
 client= OpenAI()
+gpt_counter= 0
+error_log= []
+asset_counter= 0
+comment_counter= 0
+accepted_types= {'PDP':'Desarrolladas produciendo', 
+               'PNP':'Desarrolladas no produciendo', 
+               'PND':'No desarrolladas',
+               'PRB':'Probables',
+               'PS':'Posibles'}
 
 def createComments():
     arr = [['Reservas Netas'],
@@ -42,11 +50,6 @@ def retreiveDocumentInfo(file_path, worksheet):
     
     document_text = []
     for col in ws.iter_cols():
-        #verify if documment has finished & add the last type of reserve
-        if col[1].column_letter == 'PD':  
-            document_text.append(current_reserve_type)
-            document_text.append(comments)
-            return document_text
         
         #verify if category has changed
         if col[0].value:
@@ -59,11 +62,11 @@ def retreiveDocumentInfo(file_path, worksheet):
                 if there_are_comments:
                     document_text.append(current_reserve_type)
                     document_text.append(comments)
-                    current_reserve_type= col[0].value
                     comments= createComments()
+                current_reserve_type= col[0].value
             
         #traverse the column
-        for cell in col:
+        for cell in col[:33]:
             if cell.comment:
                 
                 expression = re.compile(r'Comment:\n(.*)', re.DOTALL)
@@ -73,6 +76,10 @@ def retreiveDocumentInfo(file_path, worksheet):
                     comment = expression.search(cell.comment.text)
                 comment= comment.group(1)
                 comments[(cell.row-3)//3].append(comment)
+
+    #documment has finished, add the last type of reserve  
+    document_text.append(current_reserve_type)
+    document_text.append(comments)
     return document_text        
 
 
@@ -95,21 +102,29 @@ def findBenchmark(field_path):
             most_recent_date= new_file_date
             most_recent_file= file
 
-    if not most_recent_file:
+    if not most_recent_file:    
         error_message= 'Error: there was no benchmark found (2)'
         return error_message
     else:
         excel_path= os.path.join(field_path, most_recent_file)
+    
+        # Check the extension and replace if necessary
+        # base_name, extension = os.path.splitext(excel_path)
+        # if extension == '.xlsx':
+        #    print('Error: the extension of the file is .xlsx ')
+            
+        # elif extension == '.xlsm':
+        #     None
+        # else:
+        #     raise ValueError("File must have either a .xlsx or .xlsm extension")
+        # print('modified file extention:', excel_path)
+
         return excel_path
 
 
-def addFieldToDocument(doc:Document, field_info, field_name):
-    accepted_types= {'PDP':'Desarrolladas produciendo', 
-               'PNP':'Desarrolladas no produciendo', 
-               'PND':'No desarrolladas',
-               'PRB':'Probables',
-               'PS':'Posibles'}
-    
+def addFieldToDocument(doc:Document, field_info, field_name):    
+    global comment_counter
+    title_text: str= None
     print_type= True
     for location_type in field_info:
         #skip if not an accepted type type
@@ -137,7 +152,7 @@ def addFieldToDocument(doc:Document, field_info, field_name):
                 no_comment_variables_title+= variable + ', '
             no_comment_variables_title= no_comment_variables_title[:-2]
             doc.add_heading(no_comment_variables_title, level=4)
-            doc.add_paragraph('Calculo OK')
+            doc.add_paragraph('Calculo OK.')
 
             #add comments
             for variable in location_type:
@@ -145,9 +160,10 @@ def addFieldToDocument(doc:Document, field_info, field_name):
                     doc.add_heading(variable[0], level=4)
                     paragraph= ''
                     for comment in variable[1:]:
+                        comment_counter+= 1
                         paragraph+= comment.strip(' \t\n\r')
-                    #CHATGPT CALL
-                    paragraph= aiCorrection(paragraph)
+                    # CHATGPT CALL
+                    paragraph= aiCorrection(field_name, title_text, variable[0], paragraph)
                     para= doc.add_paragraph(paragraph)
                     para.alignment= 3
             doc.add_paragraph('')            
@@ -155,23 +171,27 @@ def addFieldToDocument(doc:Document, field_info, field_name):
             
     return doc
 
-def aiCorrection(paragraph):
+def aiCorrection(field_name, location_type, variable, text):
     model= "gpt-3.5-turbo"
-    print(f'Calling {model} for correction...')
-    system_context= '''Eres un proveedor de software para empresas del sector energetico. 
-    Has comparado las variables calculadas por tu software "Planning Space", con los valores 
-    brindados por un auditor y realizaste textos que explican las diferencias entre los 
-    valores del auditor y "Planning Space". Se te brindara: "nombre del campo", "tipo de
-      campo", "variable", "mensaje". Tu mision es devolver unicamente el texto de mensaje 
-      (sin comillas o texto adicional), con ortografía y sintaxis corregida a la perfección 
-      y redactado en tercera persona, teniendo en cuenta el contexto del mensaje.'''
+    system_context= '''Eres un proveedor de software para empresas de hidrocarburos. 
+    Has comparado las variables calculadas por tu software Planning Space (abreviado PS) 
+    con los valores brindados por un auditor y realizaste textos que explican las diferencias 
+    entre los valores del auditor y "Planning Space". Se te brindara: "Nombre del campo", 
+    "Tipo de campo", "Variable comparada", "Texto a corregir". Tu mision es devolver unicamente el texto de 
+    mensaje (sin comillas o texto adicional), con ortografía y sintaxis corregida a la 
+    perfección y redactado en tercera persona, teniendo en cuenta el contexto del mensaje.'''
+    content= f'Nombre del campo: {field_name}\nTipo de campo: {location_type}\nVariable comparada: {variable}\nTexto a corregir: {text}'
+
+    print(f'Calling "{model}" for location type "{location_type}", variable "{variable}"')
     completion= client.chat.completions.create(
         model=model,
         messages=[
             {"role":"system", "content":system_context},
-            {"role":"user", "content":paragraph}
+            {"role":"user", "content":content}
         ]
     )
+    global gpt_counter
+    gpt_counter+= 1
     return completion.choices[0].message.content
 
 def traverseAsset(worksheet, doc, asset_path, asset_name):
@@ -181,7 +201,8 @@ def traverseAsset(worksheet, doc, asset_path, asset_name):
         
     #add asset name to doc
     print('Name of the asset:', asset_name)
-    last_paragraph= doc.add_heading(asset_name, level=1)
+    global asset_counter
+    last_paragraph= doc.add_heading(f'{asset_counter+1}. {asset_name}', level=1)
     last_paragraph.alignment = 1
 
     #There's only one field in the asset
@@ -198,19 +219,22 @@ def traverseAsset(worksheet, doc, asset_path, asset_name):
     #there are multiple fields in the asset
     else:
         print(f'Fields of the asset "{asset_name}":', fields)
+        field_counter= 0
         for field in fields:
-            doc.add_heading(field, level=2)
+            doc.add_heading(f'{asset_counter+1}.{field_counter+1}. {field}', level=2)
             field_path= os.path.join(asset_path, field)
             temporal_doc= createField(doc, field_path, field, asset_name, worksheet)
             if temporal_doc:
                 doc=temporal_doc 
+                field_counter+= 1
             else:
                 print('The field info was not added to the document')
                 last_paragraph = doc.paragraphs[-1]
                 last_paragraph._element.getparent().remove(last_paragraph._element)
                 continue
 
-    print(f"Asset {asset_name} added to doccument.")
+    asset_counter+= 1
+    print(f'Asset "{asset_name}" added to doccument.')
     return doc
     
   
@@ -219,6 +243,7 @@ def createField(doc, field_path, field, asset, worksheet):
     print('Creating field:', field)
     print('Finding benchmark...')
     excel_path= findBenchmark(field_path)
+    
     if 'Error:' in excel_path:
         error_message= f'Couldnt find the benchmark for the only field of "{field}" of asset: "{asset}": {excel_path}'
         error_log.append(error_message)
@@ -267,6 +292,11 @@ def generateReportFolder():
         print('".git" not considered as an asset')
     except ValueError:
         None
+    try:
+        contributors.remove("Test")
+        print('"Test" not considered as an asset')
+    except ValueError:
+        None
 
     print('Contributors:', contributors)
     print()
@@ -313,7 +343,11 @@ def generateReportFolder():
     doc.save(new_file_location)
     print(f'Document saved in "{new_file_location}"')
 
-    print('ERRORS DURING EXECUTION')
+
+    print('ASSET COUNTER:', asset_counter)
+    print('COMMENT COUNTER:', comment_counter)
+    print('CHATGPT REQUEST COUNTER:', gpt_counter)
+    print('ERRORS DURING EXECUTION:')
     for error in error_log:
         print(error)
         print()
