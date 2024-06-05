@@ -4,13 +4,17 @@ from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from datetime import datetime
 from openai import OpenAI
-import sys
 import time
 import os
 import re
 
 error_log= []
 client= OpenAI()
+accepted_types= {'PDP':'Desarrolladas produciendo', 
+               'PNP':'Desarrolladas no produciendo', 
+               'PND':'No desarrolladas',
+               'PRB':'Probables',
+               'PS':'Posibles'}
 
 def createComments():
     arr = [['Reservas Netas'],
@@ -59,7 +63,7 @@ def retreiveDocumentInfo(file_path, worksheet):
                 current_reserve_type= col[0].value
             
         #traverse the column
-        for cell in col:
+        for cell in col[:33]:
             if cell.comment:
                 
                 expression = re.compile(r'Comment:\n(.*)', re.DOTALL)
@@ -100,16 +104,22 @@ def findBenchmark(field_path):
         return error_message
     else:
         excel_path= os.path.join(field_path, most_recent_file)
+    
+        # Check the extension and replace if necessary
+        # base_name, extension = os.path.splitext(excel_path)
+        # if extension == '.xlsx':
+        #    print('Error: the extension of the file is .xlsx ')
+            
+        # elif extension == '.xlsm':
+        #     None
+        # else:
+        #     raise ValueError("File must have either a .xlsx or .xlsm extension")
+        # print('modified file extention:', excel_path)
+
         return excel_path
 
 
-def addFieldToDocument(doc:Document, field_info):
-    accepted_types= {'PDP':'Desarrolladas produciendo', 
-               'PNP':'Desarrolladas no produciendo', 
-               'PND':'No desarrolladas',
-               'PRB':'Probables',
-               'PS':'Posibles'}
-    
+def addFieldToDocument(doc:Document, field_info):    
     print_type= True
     for location_type in field_info:
         #skip if not an accepted type type
@@ -219,6 +229,7 @@ def createField(doc, field_path, field, asset, worksheet):
     print('Creating field:', field)
     print('Finding benchmark...')
     excel_path= findBenchmark(field_path)
+    
     if 'Error:' in excel_path:
         error_message= f'Couldnt find the benchmark for the only field of "{field}" of asset: "{asset}": {excel_path}'
         error_log.append(error_message)
