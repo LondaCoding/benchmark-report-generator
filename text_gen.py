@@ -8,8 +8,11 @@ import time
 import os
 import re
 
-error_log= []
 client= OpenAI()
+# gpt_counter= 0
+error_log= []
+asset_counter= 0
+comment_counter= 0
 accepted_types= {'PDP':'Desarrolladas produciendo', 
                'PNP':'Desarrolladas no produciendo', 
                'PND':'No desarrolladas',
@@ -99,7 +102,7 @@ def findBenchmark(field_path):
             most_recent_date= new_file_date
             most_recent_file= file
 
-    if not most_recent_file:
+    if not most_recent_file:    
         error_message= 'Error: there was no benchmark found (2)'
         return error_message
     else:
@@ -120,6 +123,7 @@ def findBenchmark(field_path):
 
 
 def addFieldToDocument(doc:Document, field_info):    
+    global comment_counter
     print_type= True
     for location_type in field_info:
         #skip if not an accepted type type
@@ -155,6 +159,7 @@ def addFieldToDocument(doc:Document, field_info):
                     doc.add_heading(variable[0], level=4)
                     paragraph= ''
                     for comment in variable[1:]:
+                        comment_counter+= 1
                         paragraph+= comment.strip(' \t\n\r')
                     #CHATGPT CALL
                     # paragraph= aiCorrection(paragraph)
@@ -191,7 +196,8 @@ def traverseAsset(worksheet, doc, asset_path, asset_name):
         
     #add asset name to doc
     print('Name of the asset:', asset_name)
-    last_paragraph= doc.add_heading(asset_name, level=1)
+    global asset_counter
+    last_paragraph= doc.add_heading(f'{asset_counter+1}. {asset_name}', level=1)
     last_paragraph.alignment = 1
 
     #There's only one field in the asset
@@ -208,19 +214,22 @@ def traverseAsset(worksheet, doc, asset_path, asset_name):
     #there are multiple fields in the asset
     else:
         print(f'Fields of the asset "{asset_name}":', fields)
+        field_counter= 0
         for field in fields:
-            doc.add_heading(field, level=2)
+            doc.add_heading(f'{asset_counter+1}.{field_counter+1}. {field}', level=2)
             field_path= os.path.join(asset_path, field)
             temporal_doc= createField(doc, field_path, field, asset_name, worksheet)
             if temporal_doc:
                 doc=temporal_doc 
+                field_counter+= 1
             else:
                 print('The field info was not added to the document')
                 last_paragraph = doc.paragraphs[-1]
                 last_paragraph._element.getparent().remove(last_paragraph._element)
                 continue
 
-    print(f"Asset {asset_name} added to doccument.")
+    asset_counter+= 1
+    print(f'Asset "{asset_name}" added to doccument.')
     return doc
     
   
@@ -278,6 +287,11 @@ def generateReportFolder():
         print('".git" not considered as an asset')
     except ValueError:
         None
+    try:
+        contributors.remove("Test")
+        print('"Test" not considered as an asset')
+    except ValueError:
+        None
 
     print('Contributors:', contributors)
     print()
@@ -324,6 +338,10 @@ def generateReportFolder():
     doc.save(new_file_location)
     print(f'Document saved in "{new_file_location}"')
 
+
+    print('ASSET COUNTER:', asset_counter)
+    print('COMMENT COUNTER:', comment_counter)
+    # print('CHATGPT REQUEST COUNTER:', gpt_counter)
     print('ERRORS DURING EXECUTION')
     for error in error_log:
         print(error)
