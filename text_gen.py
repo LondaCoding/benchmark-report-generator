@@ -341,9 +341,9 @@ def generateReportFolder():
 
 
     print('ASSET COUNTER:', asset_counter)
-    print('COMMENT COUNTER:', comment_counter)
     print('FOLDER FIELDS FOUND:', found_fields_counter)
     print('ADDED FIELDS:', added_field_counter)
+    print('COMMENT COUNTER:', comment_counter)
     # print('CHATGPT REQUEST COUNTER:', gpt_counter)
     print('\nERRORS DURING EXECUTION:')
     for error in error_log:
