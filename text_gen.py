@@ -12,6 +12,8 @@ client= OpenAI()
 # gpt_counter= 0
 error_log= []
 asset_counter= 0
+found_fields_counter= 0
+added_field_counter= 0
 comment_counter= 0
 accepted_types= {'PDP':'Desarrolladas produciendo', 
                'PNP':'Desarrolladas no produciendo', 
@@ -33,17 +35,25 @@ def createComments():
     return arr
 
 
-def retreiveDocumentInfo(file_path, worksheet):
-    try:
-        # Load the Excel workbook
-        wb = load_workbook(file_path)
-        ws = wb[worksheet]
-        print(f"Retreiving comments from Worksheet: {ws}...")
-    except FileNotFoundError as e:
-        return str(e)
-    except Exception as e:
-        return str(e)
+def retreiveDocumentInfo(file_path):
+    worksheets= ['BM', 'BM (2)', 'BM (3)', 'BM (4)']
+    found= False
+    for worksheet in worksheets:
+        try:
+            wb = load_workbook(file_path)
+            ws = wb[worksheet]
+            print(f'Opened worksheet {worksheet}')
+            found= True
+            break
+        except Exception as e:
+            # error= f'Worksheet "{worksheet}" is not present.'
+            # print(error)
+            None
 
+    if not found:
+        error= f'None of the worksheets are pressent: {worksheets}'
+        return(error)
+    
     # Iterate over all cells with comments
     current_reserve_type = ws['B1'].value
     comments = createComments()
@@ -86,7 +96,7 @@ def retreiveDocumentInfo(file_path, worksheet):
 def findBenchmark(field_path):
     #single file documentation
     directory_items= os.listdir(field_path)
-    benchmarks= [item for item in directory_items if "Plantilla Benchmarking" in item]
+    benchmarks= [item for item in directory_items if "_New_" not in item]
     if len(benchmarks) < 1:
         error_message= 'Error: there was no benchmark found (1).'
         return error_message
@@ -122,7 +132,7 @@ def findBenchmark(field_path):
         return excel_path
 
 
-def addFieldToDocument(doc:Document, field_info):    
+def addFieldToDocument(doc:Document, field_info, field_name):    
     global comment_counter
     print_type= True
     for location_type in field_info:
@@ -162,7 +172,7 @@ def addFieldToDocument(doc:Document, field_info):
                         comment_counter+= 1
                         paragraph+= comment.strip(' \t\n\r')
                     #CHATGPT CALL
-                    # paragraph= aiCorrection(paragraph)
+                    # paragraph= aiCorrection(field_name, title_text, variable[0], paragraph)
                     para= doc.add_paragraph(paragraph)
                     para.alignment= 3
             doc.add_paragraph('')            
@@ -170,26 +180,30 @@ def addFieldToDocument(doc:Document, field_info):
             
     return doc
 
-# def aiCorrection(paragraph):
+# def aiCorrection(field_name, location_type, variable, text):
 #     model= "gpt-3.5-turbo"
-#     print(f'Calling {model} for correction...')
-#     system_context= '''Eres un proveedor de software para empresas del sector energetico. 
-#     Has comparado las variables calculadas por tu software "Planning Space", con los valores 
-#     brindados por un auditor y realizaste textos que explican las diferencias entre los 
-#     valores del auditor y "Planning Space". Se te brindara: "nombre del campo", "tipo de
-#       campo", "variable", "mensaje". Tu mision es devolver unicamente el texto de mensaje 
-#       (sin comillas o texto adicional), con ortografía y sintaxis corregida a la perfección 
-#       y redactado en tercera persona, teniendo en cuenta el contexto del mensaje.'''
+#     system_context= '''Eres un proveedor de software para empresas de hidrocarburos. 
+#     Has comparado las variables calculadas por tu software Planning Space (abreviado PS) 
+#     con los valores brindados por un auditor y realizaste textos que explican las diferencias 
+#     entre los valores del auditor y "Planning Space". Se te brindara: "Nombre del campo", 
+#     "Tipo de campo", "Variable comparada", "Texto a corregir". Tu mision es devolver unicamente el texto de 
+#     mensaje (sin comillas o texto adicional), con ortografía y sintaxis corregida a la 
+#     perfección y redactado en tercera persona, teniendo en cuenta el contexto del mensaje.'''
+#     content= f'Nombre del campo: {field_name}\nTipo de campo: {location_type}\nVariable comparada: {variable}\nTexto a corregir: {text}'
+
+#     print(f'Calling "{model}" for location type "{location_type}", variable "{variable}"')
 #     completion= client.chat.completions.create(
 #         model=model,
 #         messages=[
 #             {"role":"system", "content":system_context},
-#             {"role":"user", "content":paragraph}
+#             {"role":"user", "content":content}
 #         ]
 #     )
+#     global gpt_counter
+#     gpt_counter+= 1
 #     return completion.choices[0].message.content
 
-def traverseAsset(worksheet, doc, asset_path, asset_name):
+def traverseAsset(doc, asset_path, asset_name):
     #Get the folders in the directory
     asset_items= os.listdir(asset_path)
     fields= [item for item in asset_items if os.path.isdir(os.path.join(asset_path, item))]
@@ -200,12 +214,14 @@ def traverseAsset(worksheet, doc, asset_path, asset_name):
     last_paragraph= doc.add_heading(f'{asset_counter+1}. {asset_name}', level=1)
     last_paragraph.alignment = 1
 
+    global added_field_counter
     #There's only one field in the asset
     if len(fields) < 1:
         print("Theres only one field in the asset")
-        temporal_doc= createField(doc, asset_path, asset_name, asset_name, worksheet)
+        temporal_doc= createField(doc, asset_path, asset_name, asset_name)
         if temporal_doc:
             doc=temporal_doc 
+            added_field_counter+= 1
         else:
             print('The field info was not added to the document')
             last_paragraph = doc.paragraphs[-1]
@@ -218,10 +234,11 @@ def traverseAsset(worksheet, doc, asset_path, asset_name):
         for field in fields:
             doc.add_heading(f'{asset_counter+1}.{field_counter+1}. {field}', level=2)
             field_path= os.path.join(asset_path, field)
-            temporal_doc= createField(doc, field_path, field, asset_name, worksheet)
+            temporal_doc= createField(doc, field_path, field, asset_name)
             if temporal_doc:
                 doc=temporal_doc 
                 field_counter+= 1
+                added_field_counter+= 1
             else:
                 print('The field info was not added to the document')
                 last_paragraph = doc.paragraphs[-1]
@@ -233,7 +250,7 @@ def traverseAsset(worksheet, doc, asset_path, asset_name):
     return doc
     
   
-def createField(doc, field_path, field, asset, worksheet):
+def createField(doc, field_path, field, asset):
     print()
     print('Creating field:', field)
     print('Finding benchmark...')
@@ -244,9 +261,11 @@ def createField(doc, field_path, field, asset, worksheet):
         error_log.append(error_message)
         print(error_message)
         return None
-    
+    global found_fields_counter
+    found_fields_counter+= 1
+
     print(f'Fetching field "{field}" comments...')
-    excel_content= retreiveDocumentInfo(excel_path, worksheet)
+    excel_content= retreiveDocumentInfo(excel_path)
     if type(excel_content) is str:
         error_message= f'Couldnt retrieve field "{field}" from asset "{asset}". Error: {excel_content}'
         error_log.append(error_message)
@@ -254,28 +273,11 @@ def createField(doc, field_path, field, asset, worksheet):
         return None
     
     print(f'Adding field "{field}" comments...')
-    return addFieldToDocument(doc, excel_content)
+    return addFieldToDocument(doc, excel_content, field)
 
 
 def generateReportFolder():
     #create directory where reports will be saved
-    if not "Reportes Generados" in os.listdir(os.getcwd()):
-        print('Creating directory "Reportes Generados"...')
-        os.makedirs("Reportes Generados") 
-    else:
-        print('Directory "Reportes Generados" already exists')
-        try:
-            for file in os.listdir("Reportes Generados"):
-                os.remove(f"Reportes Generados\\{file}")
-                print(f'The file "Reportes Generados\\{file}" has been erased')
-            time.sleep(1)
-        except Exception as e:
-            error_message= f"An error occurred: {e}\n----------------RE-RUN THE PROGRAM AFTER CLOSING ALL DOCUMMENTS TO ENSURE INTEGRITY----------------"
-            error_log.append(error_message)
-            print(error_message)
-            
-
-
     contributors= [item for item in os.listdir(os.getcwd()) if os.path.isdir(item)]
     try:
         contributors.remove("Reportes Generados")
@@ -303,8 +305,7 @@ def generateReportFolder():
     for contributer in contributors:
         contributer_dir= os.path.join(os.getcwd(), contributer)
         assets= [item for item in os.listdir(contributer_dir) if os.path.isdir(os.path.join(contributer_dir, item))]
-
-        worksheet= str(input(f'Worshet for "{contributer}" files: '))
+        
         for asset in assets:
             #modify the title & it's style
             regex= r'\d+. (.*)'
@@ -319,7 +320,7 @@ def generateReportFolder():
             asset_path= os.path.join(contributer_dir, asset)
 
             print('CREATING ASSET:', asset)
-            doc= traverseAsset(worksheet, doc, asset_path, asset_name)
+            doc= traverseAsset(doc, asset_path, asset_name)
             print()
             print()
     
@@ -341,8 +342,10 @@ def generateReportFolder():
 
     print('ASSET COUNTER:', asset_counter)
     print('COMMENT COUNTER:', comment_counter)
+    print('FOLDER FIELDS FOUND:', found_fields_counter)
+    print('ADDED FIELDS:', added_field_counter)
     # print('CHATGPT REQUEST COUNTER:', gpt_counter)
-    print('ERRORS DURING EXECUTION')
+    print('\nERRORS DURING EXECUTION:')
     for error in error_log:
         print(error)
         print()

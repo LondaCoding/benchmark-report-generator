@@ -107,18 +107,6 @@ def findBenchmark(field_path):
         return error_message
     else:
         excel_path= os.path.join(field_path, most_recent_file)
-    
-        # Check the extension and replace if necessary
-        # base_name, extension = os.path.splitext(excel_path)
-        # if extension == '.xlsx':
-        #    print('Error: the extension of the file is .xlsx ')
-            
-        # elif extension == '.xlsm':
-        #     None
-        # else:
-        #     raise ValueError("File must have either a .xlsx or .xlsm extension")
-        # print('modified file extention:', excel_path)
-
         return excel_path
 
 
