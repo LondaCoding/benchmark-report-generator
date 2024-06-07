@@ -340,7 +340,7 @@ def generateReportFolder():
     print(f'Document saved in "{new_file_location}"')
 
 
-    print('ASSET COUNTER:', asset_counter)
+    print('ASSET COUNTER:', asset_counter) 
     print('FOLDER FIELDS FOUND:', found_fields_counter)
     print('ADDED FIELDS:', added_field_counter)
     print('COMMENT COUNTER:', comment_counter)
