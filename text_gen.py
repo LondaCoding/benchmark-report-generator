@@ -8,7 +8,7 @@ import time
 import os
 import re
 
-client= OpenAI()
+# client= OpenAI()
 # gpt_counter= 0
 error_log= []
 asset_counter= 0
