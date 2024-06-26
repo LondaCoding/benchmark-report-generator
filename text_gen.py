@@ -76,15 +76,16 @@ def retreiveDocumentInfo(file_path):
                 current_reserve_type= col[0].value
             
         #traverse the column
+        first_comment= True
         for cell in col[:33]:
             if cell.comment:
-                
                 expression = re.compile(r'Comment:\n(.*)', re.DOTALL)
-                comment = expression.search(cell.comment.text)
-                if not comment:
+                cell_comment = expression.search(cell.comment.text)
+                if not cell_comment:
                     expression = re.compile(r'Comentario:\n(.*)', re.DOTALL)
-                    comment = expression.search(cell.comment.text)
-                comment= comment.group(1)
+                    cell_comment = expression.search(cell.comment.text)
+                comment= f'Para el año {col[1].value}, se presenta una diferencia del {round(cell.value*100, 2)}% entre el auditor y Planning Space.\n'
+                comment+= cell_comment.group(1).replace('Reply:\n','').strip(' \t\n\r')
                 comments[(cell.row-3)//3].append(comment)
 
     #documment has finished, add the last type of reserve  
@@ -117,22 +118,11 @@ def findBenchmark(field_path):
         return error_message
     else:
         excel_path= os.path.join(field_path, most_recent_file)
-    
-        # Check the extension and replace if necessary
-        # base_name, extension = os.path.splitext(excel_path)
-        # if extension == '.xlsx':
-        #    print('Error: the extension of the file is .xlsx ')
-            
-        # elif extension == '.xlsm':
-        #     None
-        # else:
-        #     raise ValueError("File must have either a .xlsx or .xlsm extension")
-        # print('modified file extention:', excel_path)
 
         return excel_path
 
 
-def addFieldToDocument(doc:Document, field_info, field_name):    
+def addFieldToDocument(doc:Document, field_info):    
     global comment_counter
     print_type= True
     for location_type in field_info:
@@ -170,7 +160,9 @@ def addFieldToDocument(doc:Document, field_info, field_name):
                     paragraph= ''
                     for comment in variable[1:]:
                         comment_counter+= 1
-                        paragraph+= comment.strip(' \t\n\r')
+                        paragraph+= comment
+                        if comment != variable[len(variable)-1]:
+                            paragraph+= '\n\n'
                     #CHATGPT CALL
                     # paragraph= aiCorrection(field_name, title_text, variable[0], paragraph)
                     para= doc.add_paragraph(paragraph)
@@ -183,12 +175,12 @@ def addFieldToDocument(doc:Document, field_info, field_name):
 # def aiCorrection(field_name, location_type, variable, text):
 #     model= "gpt-3.5-turbo"
 #     system_context= '''Eres un proveedor de software para empresas de hidrocarburos. 
-#     Has comparado las variables calculadas por tu software Planning Space (abreviado PS) 
+#     Has comparado las variables calculadas por tu software Planning Space (PS) 
 #     con los valores brindados por un auditor y realizaste textos que explican las diferencias 
-#     entre los valores del auditor y "Planning Space". Se te brindara: "Nombre del campo", 
-#     "Tipo de campo", "Variable comparada", "Texto a corregir". Tu mision es devolver unicamente el texto de 
-#     mensaje (sin comillas o texto adicional), con ortografía y sintaxis corregida a la 
-#     perfección y redactado en tercera persona, teniendo en cuenta el contexto del mensaje.'''
+#     entre los valores del auditor y Planning Space. Se te brindara: "Nombre del campo", 
+#     "Tipo de campo", "Variable comparada", "Texto a corregir". Tu mision es devolver UNICAMENTE el texto de 
+#     mensaje, SIN COMMILLAS ADICIONALES y SIN TEXTO ADICIONAL, con ortografía y sintaxis corregida a la 
+#     perfección y redactado en tercera persona. Es fundamental que no omitas ningun porcentaje o valor numerico.'''
 #     content= f'Nombre del campo: {field_name}\nTipo de campo: {location_type}\nVariable comparada: {variable}\nTexto a corregir: {text}'
 
 #     print(f'Calling "{model}" for location type "{location_type}", variable "{variable}"')
@@ -273,7 +265,7 @@ def createField(doc, field_path, field, asset):
         return None
     
     print(f'Adding field "{field}" comments...')
-    return addFieldToDocument(doc, excel_content, field)
+    return addFieldToDocument(doc, excel_content)
 
 
 def generateReportFolder():
